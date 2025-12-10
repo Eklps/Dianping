@@ -16,4 +16,10 @@ public interface IShopService extends IService<Shop> {
 
     Result queryById(Long id);
 
+    Result updateShopById(Shop shop);
+
+//    boolean tryLock(String lockKey);
+//
+//    void unLock(String lockKey);
+
 }
