@@ -14,7 +14,7 @@ public class RedisWorker {
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
-    private static final long BEGIN_TIMESTAMP=1640995200L;
+    private static final long BEGIN_TIMESTAMP=1640995200L;//2022年一月一日
     private static final long COUNT_BITS=32;
 
     public long nextId(String prefix) {
@@ -30,6 +30,6 @@ public class RedisWorker {
         //2.2获取自增id
         long count = stringRedisTemplate.opsForValue().increment("icr:"+prefix+":"+date);
 
-        return timeStamp<<COUNT_BITS | count;
+        return timeStamp<<COUNT_BITS | count;//当前的时间戳<<32+redis中setnx的自增id
     }
     }

@@ -2,6 +2,7 @@ package com.hmdp.utils;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class SimpleRedisLock implements ILock{
@@ -11,6 +12,7 @@ public class SimpleRedisLock implements ILock{
 
     private StringRedisTemplate stringRedisTemplate;
     private static final String KEY_PREFIX = "lock:";
+    private static final String THREAD_ID_PREFIX= UUID.randomUUID().toString()+"-";
 
     public SimpleRedisLock(String name,StringRedisTemplate stringRedisTemplate) {
         this.name=name;
@@ -20,7 +22,7 @@ public class SimpleRedisLock implements ILock{
     @Override
     public boolean tryLock(long timeSec){
         //先要获取线程的标识,用于后面对于value的存储
-        long threadId=Thread.currentThread().getId();
+        String threadId=THREAD_ID_PREFIX+Thread.currentThread().getId();
         //尝试上锁，并用success记录是否上锁成功
         boolean success = stringRedisTemplate.opsForValue()
                 .setIfAbsent(
@@ -32,7 +34,15 @@ public class SimpleRedisLock implements ILock{
 
     @Override
     public void unLock(){
-        stringRedisTemplate.delete(KEY_PREFIX+name);
+        //获取线程标识,用于后面获取完value的判定
+        String targetId=THREAD_ID_PREFIX+Thread.currentThread().toString();
+        //获取锁中记录的线程标识，也就是存储的value
+        String id=stringRedisTemplate.opsForValue().get(KEY_PREFIX+name);
+
+        if (targetId.equals(id)) {
+            stringRedisTemplate.delete(KEY_PREFIX+name);
+            //如果两个id匹配就说明就是要找的，已经有的锁，然后开锁
+        }
     }
 
 }
