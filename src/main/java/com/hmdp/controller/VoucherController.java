@@ -36,13 +36,13 @@ public class VoucherController {
 
     /**
      * 新增秒杀券
-     * @param voucher 优惠券信息，包含秒杀信息
+     * @param voucherId 优惠券信息，包含秒杀信息
      * @return 优惠券id
      */
     @PostMapping("seckill")
-    public Result addSeckillVoucher(@RequestBody Voucher voucher) {
-        voucherService.addSeckillVoucher(voucher);
-        return Result.ok(voucher.getId());
+    public Result addSeckillVoucher(@RequestBody Long voucherId) {
+        voucherService.addSeckillVoucher(voucherId);
+        return Result.ok(voucherId);
     }
 
     /**
