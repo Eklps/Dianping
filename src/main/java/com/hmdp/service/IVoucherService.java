@@ -6,7 +6,7 @@ import com.hmdp.entity.Voucher;
 
 /**
  * <p>
- *  服务类
+ * 服务类
  * </p>
  *
  * @author 虎哥
@@ -16,5 +16,5 @@ public interface IVoucherService extends IService<Voucher> {
 
     Result queryVoucherOfShop(Long shopId);
 
-    Result addSeckillVoucher(Long voucherId);
+    void addSeckillVoucher(Voucher voucher);
 }
