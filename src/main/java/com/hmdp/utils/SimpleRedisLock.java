@@ -4,6 +4,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
+import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -44,15 +45,21 @@ public class SimpleRedisLock implements ILock {
 
     @Override
     public void unLock() {
-        // 获取线程标识,用于后面获取完value的判定
-        String targetId = THREAD_ID_PREFIX + Thread.currentThread().toString();
-        // 获取锁中记录的线程标识，也就是存储的value
-        String id = stringRedisTemplate.opsForValue().get(KEY_PREFIX + name);
+        // // 获取线程标识,用于后面获取完value的判定
+        // String targetId = THREAD_ID_PREFIX + Thread.currentThread().toString();
+        // // 获取锁中记录的线程标识，也就是存储的value
+        // String id = stringRedisTemplate.opsForValue().get(KEY_PREFIX + name);
 
-        if (targetId.equals(id)) {
-            stringRedisTemplate.delete(KEY_PREFIX + name);
-            // 如果两个id匹配就说明就是要找的，已经有的锁，然后开锁
-        }
+        // if (targetId.equals(id)) {
+        //     stringRedisTemplate.delete(KEY_PREFIX + name);
+        //     // 如果两个id匹配就说明就是要找的，已经有的锁，然后开锁
+        // }
+
+        stringRedisTemplate.execute(
+            UNLOCK_SCRIPT,
+            Collections.singletonList(KEY_PREFIX + name),
+            THREAD_ID_PREFIX + Thread.currentThread().getId()
+        );
     }
 
 }
