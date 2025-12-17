@@ -77,59 +77,55 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         SEKILL_SCRIPT.setResultType(Long.class);
     }
 
-
-
     private class VoucherOrderHandler implements Runnable {
         @Override
-        public void run(){
-            while(true){
+        public void run() {
+            while (true) {
                 try {
-                    //1.获取消息队列中的订单信息
-                    //MapRecord是Spring data redis中的一个类，用于表示stream中的消息
-                    //XREADGROUP GROUP g1 c1 COUNT 1 BLOCK 2000 STREAMS stream.orders >
-                    //回顾一下上面的指令，BLOCK 2000指的是如果队列中没有订单信息就阻塞2000ms等待
-                    //spring要生成争取恶的XREADGROUP指令，下面就必须对位传入这三个关键的参数
-                    List<MapRecord<String,Object,Object>> list=
-                            stringRedisTemplate.opsForStream().read(
-                                    Consumer.from(GROUP_NAME,CONSUMER_NAME)
-                                    //这里StreamReadOptions.empty()是为了创建一个默认的参数
-                                    ,StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
-                                    StreamOffset.create(STREAM_KEY, ReadOffset.lastConsumed())
-                            );
+                    // 1.获取消息队列中的订单信息
+                    // MapRecord是Spring data redis中的一个类，用于表示stream中的消息
+                    // XREADGROUP GROUP g1 c1 COUNT 1 BLOCK 2000 STREAMS stream.orders >
+                    // 回顾一下上面的指令，BLOCK 2000指的是如果队列中没有订单信息就阻塞2000ms等待
+                    // spring要生成争取恶的XREADGROUP指令，下面就必须对位传入这三个关键的参数
+                    List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
+                            Consumer.from(GROUP_NAME, CONSUMER_NAME)
+                            // 这里StreamReadOptions.empty()是为了创建一个默认的参数
+                            , StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
+                            StreamOffset.create(STREAM_KEY, ReadOffset.lastConsumed()));
 
-                    //2.判断消息是否获取成功
-                    if(list==null&&list.isEmpty()){
-                        //没有消息，继续下一次while循环
+                    // 2.判断消息是否获取成功
+                    if (list == null || list.isEmpty()) {
+                        // 没有消息，继续下一次while循环
                         continue;
                     }
 
-                    //3.解析消息中的订单信息
-                    //MapRecord里的第一个成员String实际上是Redis Stream 的名称，这里是stream.order
-                    MapRecord<String,Object,Object> record=list.get(0);
-                    //取出来的的是userId(map的key),voucherId(map的value)
-                    Map<Object,Object> values=record.getValue();
-                    //values是一个map，但是他们的键值名称分别是userId,voucherId,可以和VoucherOrder中的成员变量userId,voucherId对应
-                    //故BeanUtil可自动填入
-                    VoucherOrder voucherOrder= BeanUtil.fillBeanWithMap(values,new VoucherOrder(),true);
+                    // 3.解析消息中的订单信息
+                    // MapRecord里的第一个成员String实际上是Redis Stream 的名称，这里是stream.order
+                    MapRecord<String, Object, Object> record = list.get(0);
+                    // 取出来的的是userId(map的key),voucherId(map的value)
+                    Map<Object, Object> values = record.getValue();
+                    // values是一个map，但是他们的键值名称分别是userId,voucherId,可以和VoucherOrder中的成员变量userId,voucherId对应
+                    // 故BeanUtil可自动填入
+                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
 
-                    //4.执行业务：创建订单
+                    // 4.执行业务：创建订单
                     handleVoucherOrder(voucherOrder);
 
-                    //5.ACK确认
-                    //温习ack就是消费者完成了任务从pendlist中确认删除这条消息记录
+                    // 5.ACK确认
+                    // 温习ack就是消费者完成了任务从pendlist中确认删除这条消息记录
                     /**
                      * param1:redis Stream的名称
                      * param2:处理这个消息的消费者组名
-                     *param3:record.getId() 是什么？
+                     * param3:record.getId() 是什么？
                      * record.getId() 获取的是当前被读取到的那条消息在 Stream 中的唯一标识符（ID）。
                      * 格式： 这个 ID 是一个特殊的字符串，
                      * 格式通常是 时间戳毫秒数-序号，例如：1642999999000-0。
                      */
-                    stringRedisTemplate.opsForStream().acknowledge(STREAM_KEY,GROUP_NAME,record.getId());
+                    stringRedisTemplate.opsForStream().acknowledge(STREAM_KEY, GROUP_NAME, record.getId());
 
                 } catch (Exception e) {
-                    log.error("处理订单异常",e);
-                    //出现异常，处理plending list中的消息
+                    log.error("处理订单异常", e);
+                    // 出现异常，处理plending list中的消息
                     handlePendingList();
                 }
 
@@ -154,49 +150,46 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
      * 处理认领了但是没ACK的消息
      */
     private void handlePendingList() {
-        while(true){
-            try{
+        while (true) {
+            try {
                 // 读取 Pending List 中的消息（用 0 而不是 >）
                 List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
                         Consumer.from(GROUP_NAME, CONSUMER_NAME),
                         StreamReadOptions.empty().count(1),
-                        StreamOffset.create(STREAM_KEY, ReadOffset.from("0"))
-                );
+                        StreamOffset.create(STREAM_KEY, ReadOffset.from("0")));
 
-                //如果pending list没有消息了，说明处理完了，退出循环
-                if(list==null||list.isEmpty()){
+                // 如果pending list没有消息了，说明处理完了，退出循环
+                if (list == null || list.isEmpty()) {
                     break;
                 }
 
                 // 解析并处理,与上面的主逻辑类似，将redis stream中的消息转换为java中的MapRecord
-                //然后将MapRecord转换为Map(下面的value),然后把value的数据填入一个新的VoucherOrder
+                // 然后将MapRecord转换为Map(下面的value),然后把value的数据填入一个新的VoucherOrder
                 MapRecord<String, Object, Object> record = list.get(0);
                 Map<Object, Object> values = record.getValue();
                 VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
 
                 handleVoucherOrder(voucherOrder);
 
-                //ACK
+                // ACK
                 stringRedisTemplate.opsForStream().acknowledge(STREAM_KEY, GROUP_NAME, record.getId());
 
-            }catch(Exception e){
-                log.error("在处理pleanding list中出现错误",e);
-                try{
-                    Thread.sleep(50);//休息一下再重试
-                }catch(InterruptedException ex){
+            } catch (Exception e) {
+                log.error("在处理pleanding list中出现错误", e);
+                try {
+                    Thread.sleep(50);// 休息一下再重试
+                } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                 }
             }
         }
     }
 
-    //将订单写入数据库
-    private void handleVoucherOrder(VoucherOrder voucherOrder){
+    // 将订单写入数据库
+    private void handleVoucherOrder(VoucherOrder voucherOrder) {
         // 这里直接写数据库，不需要再判断库存和一人一单（Lua 已经做过了）
         save(voucherOrder);
     }
-
-
 
     @Override
     public Result seckillVoucher(Long voucherId) {
